@@ -32,7 +32,10 @@ public class EnemyManager {
      * @param viewHeight   viewport height in world units
      */
     public void update(float delta, Vector2 cameraCenter, Vector2 playerPos,
-                       float viewWidth, float viewHeight) {
+                       float viewWidth, float viewHeight,
+                       com.rgs.runesurvivor.entities.Player player,
+                       com.rgs.runesurvivor.world.HitMarkerSystem hits) {
+
         GdxAI.getTimepiece().update(delta);
 
         float halfDiag = 0.5f * (float) Math.sqrt(viewWidth * viewWidth + viewHeight * viewHeight);
@@ -40,7 +43,6 @@ public class EnemyManager {
         float despawnR = halfDiag * despawnRadiusMult;
         float despawnR2 = despawnR * despawnR;
 
-        // Spawn
         spawnTimer += delta;
         if (enemies.size < maxEnemies && spawnTimer >= spawnInterval) {
             spawnTimer = 0f;
@@ -48,21 +50,19 @@ public class EnemyManager {
             enemies.add(new Enemy(worldManager, pos.x, pos.y));
         }
 
-        // Update & cull
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
 
-            // despawn if far from camera
+            // Despawn if far
             Vector2 ep = e.getPosition();
-            float dx = ep.x - cameraCenter.x;
-            float dy = ep.y - cameraCenter.y;
-            if (dx * dx + dy * dy > despawnR2) {
+            float dx = ep.x - cameraCenter.x, dy = ep.y - cameraCenter.y;
+            if (dx*dx + dy*dy > despawnR2) {
                 e.dispose(worldManager);
                 enemies.removeIndex(i);
                 continue;
             }
 
-            e.update(delta);
+            e.update(delta, player, hits);
             if (e.isDead()) {
                 e.dispose(worldManager);
                 enemies.removeIndex(i);
@@ -131,4 +131,15 @@ public class EnemyManager {
     public void setSpawnInterval(float s) { this.spawnInterval = s; }
     public void setSpawnRadiusMultiplier(float m) { this.spawnRadiusMult = Math.max(0.5f, m); }
     public void setDespawnRadiusMultiplier(float m) { this.despawnRadiusMult = Math.max(1.0f, m); }
+
+    public void despawnWithinRadius(com.badlogic.gdx.math.Vector2 center, float radius) {
+        float r2 = radius * radius;
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy e = enemies.get(i);
+            if (e.getPosition().dst2(center) <= r2) {
+                e.dispose(worldManager);
+                enemies.removeIndex(i);
+            }
+        }
+    }
 }

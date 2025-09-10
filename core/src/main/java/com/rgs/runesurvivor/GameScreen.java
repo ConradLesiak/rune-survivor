@@ -95,6 +95,9 @@ public class GameScreen implements Screen {
     private float ghostSpawnTimer = 0f;
     private static final float GHOST_SPAWN_EVERY = 0.028f; // ~35 ghosts/sec while dashing
 
+    private com.rgs.runesurvivor.ui.DeathOverlay deathOverlay;
+    private boolean dead = false;
+
 
     public GameScreen(RuneSurvivorGame game) {
         this.game = game;
@@ -168,6 +171,11 @@ public class GameScreen implements Screen {
                 autosaveTimer = 0f;
             }
         );
+
+        deathOverlay = new com.rgs.runesurvivor.ui.DeathOverlay(new com.rgs.runesurvivor.ui.DeathOverlay.Listener() {
+            @Override public void onRespawn() { respawnPlayer(); }
+            @Override public void onMainMenu() { requestExitToMainMenu(); }
+        });
 
         // HUD (Inventory button bottom-left)
         buildUi();
@@ -288,11 +296,16 @@ public class GameScreen implements Screen {
             player.update();
             cameraController.update();
 
+            // Detect death
+            if (!dead && player.getCurrentHp() <= 0f) {
+                onPlayerDeath();
+            }
+
             camCenterTmp.set(worldStage.getCamera().position.x, worldStage.getCamera().position.y);
             playerPosTmp.set(player.getBody().getPosition());
             float vw = worldStage.getViewport().getWorldWidth();
             float vh = worldStage.getViewport().getWorldHeight();
-            enemyManager.update(delta, camCenterTmp, playerPosTmp, vw, vh);
+            enemyManager.update(delta, camCenterTmp, playerPosTmp, vw, vh, player, hitMarkers);
 
             dashFx.update(delta);
 
@@ -326,25 +339,29 @@ public class GameScreen implements Screen {
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // World (sprites)
+        // ---- World sprites ----
         game.batch.setProjectionMatrix(worldStage.getCamera().combined);
         game.batch.begin();
         island.render(game.batch);
         enemyManager.render(game.batch);
         player.renderSword(game.batch);
-        dashFx.renderGhosts(game.batch, player.getTexture()); // ← ghosts
+        dashFx.renderGhosts(game.batch, player.getTexture());
         player.render(game.batch);
         hitMarkers.render(game.batch);
         game.batch.end();
 
-        // Shapes (HP bar + shockwave rings)
+        // ---- FILLED shapes (BEGIN before calling Enemy.renderAttack!) ----
         shapeRenderer.setProjectionMatrix(worldStage.getCamera().combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        player.renderHpBar(shapeRenderer);
-        shapeRenderer.end();
 
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        //dashFx.renderShapes(shapeRenderer); // ← shockwave rings
+        // Enemy attack telegraphs (windup/strike wedges)
+        for (com.rgs.runesurvivor.entities.Enemy e : enemyManager.getEnemies()) {
+            e.renderAttack(shapeRenderer);  // <- MUST be inside begin/end
+        }
+
+        // Player HP bar
+        player.renderHpBar(shapeRenderer);
+
         shapeRenderer.end();
 
         worldManager.debugRender(worldStage.getCamera());
@@ -359,7 +376,7 @@ public class GameScreen implements Screen {
 
             float vw = worldStage.getViewport().getWorldWidth();
             float vh = worldStage.getViewport().getWorldHeight();
-            enemyManager.update(delta, camCenterTmp, playerPosTmp, vw, vh);
+            enemyManager.update(delta, camCenterTmp, playerPosTmp, vw, vh, player, hitMarkers);
 
             // Mouse world position
             mouseTmp.set(Gdx.input.getX(), Gdx.input.getY(), 0f);
@@ -398,6 +415,10 @@ public class GameScreen implements Screen {
         if (inventoryOpen) {
             inventoryOverlay.actAndDraw(delta);
         }
+
+        if (deathOverlay != null && deathOverlay.isVisible()) {
+            deathOverlay.render(delta);
+        }
     }
 
     @Override
@@ -406,6 +427,7 @@ public class GameScreen implements Screen {
         uiStage.getViewport().update(width, height, true);
         pauseOverlay.resize(width, height);
         inventoryOverlay.resize(width, height);
+        if (deathOverlay != null) deathOverlay.resize(width, height);
     }
 
     @Override public void pause() {}
@@ -579,4 +601,44 @@ public class GameScreen implements Screen {
         });
         return b;
     }
+
+    private void onPlayerDeath() {
+        if (dead) return;
+        dead = true;
+
+        // Freeze gameplay like pause, hide pause button/overlay
+        setPaused(true);
+        if (pauseOverlay != null) pauseOverlay.hide();
+        if (pauseBtn != null) pauseBtn.setVisible(false);
+        if (inventoryOverlay != null) inventoryOverlay.hide();
+        deathOverlay.show();
+    }
+
+    private void respawnPlayer() {
+        // Find a safe land point near island center
+        com.badlogic.gdx.math.Vector2 spawn = island.findCenterLandSpawn();
+
+        // Reset player
+        player.setPosition(spawn.x, spawn.y);
+        player.setCurrentHp(player.getMaxHp());
+        try { player.setStamina(player.getMaxStamina()); } catch (Throwable ignored) {}
+
+        // (Optional) clear nearby enemies so you don't get chain-killed immediately
+        if (enemyManager != null) enemyManager.despawnWithinRadius(spawn, 450f);
+
+        // Unfreeze
+        dead = false;
+        setPaused(false);
+        if (pauseBtn != null) pauseBtn.setVisible(true);
+        deathOverlay.hide();
+
+        // Restore input to gameplay/UI stage
+        Gdx.input.setInputProcessor(uiStage);
+
+        // Save new state
+        if (saveManager != null) {
+            saveManager.savePlayer(player);
+        }
+    }
+
 }

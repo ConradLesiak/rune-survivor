@@ -8,6 +8,7 @@ import com.badlogic.gdx.utils.Array;
 public class HitMarkerSystem {
     public static final Color WHITE = new Color(1f,1f,1f,1f);
     public static final Color GOLD  = new Color(1f,0.84f,0f,1f);
+    public static final Color RED = new Color(1f, 0.2f, 0.2f, 1f);
 
     private final Array<HitMarker> list = new Array<>();
     private final BitmapFont font = new BitmapFont();
