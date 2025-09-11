@@ -12,7 +12,7 @@ public class EnemyManager {
     private final Array<Enemy> enemies = new Array<>();
     private float spawnTimer = 0f;
 
-    private int   maxEnemies        = 30;
+    private int   maxEnemies        = 10;
     private float spawnInterval     = 1.0f;  // seconds
     private float minPlayerDistance = 150f;
 

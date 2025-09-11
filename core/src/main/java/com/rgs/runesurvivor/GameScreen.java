@@ -98,6 +98,12 @@ public class GameScreen implements Screen {
     private com.rgs.runesurvivor.ui.DeathOverlay deathOverlay;
     private boolean dead = false;
 
+    private com.rgs.runesurvivor.ui.HealthPotionUI healthPotion;
+
+    private com.rgs.runesurvivor.world.ResourceManager resourceManager;
+
+
+
 
     public GameScreen(RuneSurvivorGame game) {
         this.game = game;
@@ -115,9 +121,16 @@ public class GameScreen implements Screen {
         // Build island with persisted seed (as you already do)
         saveManager = new com.rgs.runesurvivor.save.SaveManager();
         long islandSeed = saveManager.getOrCreateIslandSeed();
+
         island = new com.rgs.runesurvivor.world.IslandRenderer(
             512, 512, 40f, (int)(islandSeed & 0x7fffffff), worldManager.getWorld()
         );
+
+        // resources (deterministic from the same seed)
+        resourceManager = new com.rgs.runesurvivor.world.ResourceManager(
+            island, islandSeed, worldManager.getWorld()
+        );
+
 
         // Choose a safe land spawn near center
         com.badlogic.gdx.math.Vector2 spawn = island.findCenterLandSpawn();
@@ -200,6 +213,32 @@ public class GameScreen implements Screen {
             }
         });
         hud.add(inventoryBtn).width(200f).height(56f);
+
+        // ---- Health Potion button right of Inventory ----
+        healthPotion = new com.rgs.runesurvivor.ui.HealthPotionUI(
+            uiStage, "potion1.png", 10f,
+            // Listener: only consume if allowed, then heal 20% max HP
+            () -> {
+                if (paused || dead || inventoryOpen) return false;
+                if (player.getCurrentHp() <= 0f) return false; // already dead
+                float max = player.getMaxHp();
+                float cur = player.getCurrentHp();
+                if (cur >= max) return false; // no effect at full health
+                float heal = max * 0.20f;
+                player.setCurrentHp(Math.min(max, cur + heal));
+
+                // Optional: green heal pop
+                try {
+                    com.badlogic.gdx.math.Vector2 p = player.getBody().getPosition();
+                    hitMarkers.spawn(p.x, p.y + 40f, "+" + Math.round(heal),
+                        new com.badlogic.gdx.graphics.Color(0.25f, 1f, 0.35f, 1f), 0.9f);
+                } catch (Throwable ignored) {}
+                return true;
+            }
+        );
+
+        // Add the button to the same row, to the right of Inventory
+        hud.add(healthPotion.getButton()).size(64f);
 
         // ---- Pause icon (top-right) ----
         com.badlogic.gdx.scenes.scene2d.ui.Table tr = new com.badlogic.gdx.scenes.scene2d.ui.Table();
@@ -321,6 +360,12 @@ public class GameScreen implements Screen {
                     dashFx.spawnGhost(cx, cy, player.getWidth(), player.getHeight(), 0f, !player.isFacingRight());
                 }
             }
+
+            boolean onePressed = !paused && !dead && !inventoryOpen
+                && Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.NUM_1);
+            if (onePressed && healthPotion != null) {
+                healthPotion.requestUse();
+            }
         }
 
         autosaveTimer += delta;
@@ -339,16 +384,26 @@ public class GameScreen implements Screen {
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // ---- World sprites ----
         game.batch.setProjectionMatrix(worldStage.getCamera().combined);
         game.batch.begin();
+
+        // 1) Terrain first
         island.render(game.batch);
+
+        // 2) Characters (draw these UNDER resource nodes)
         enemyManager.render(game.batch);
-        player.renderSword(game.batch);
+        player.renderSword(game.batch);          // (ok if this ends up under trees too)
         dashFx.renderGhosts(game.batch, player.getTexture());
         player.render(game.batch);
+
+        // 3) Resource nodes ON TOP of the player
+        if (resourceManager != null) resourceManager.render(game.batch);
+
+        // 4) Overlays that should stay above everything
         hitMarkers.render(game.batch);
+
         game.batch.end();
+
 
         // ---- FILLED shapes (BEGIN before calling Enemy.renderAttack!) ----
         shapeRenderer.setProjectionMatrix(worldStage.getCamera().combined);
@@ -361,6 +416,8 @@ public class GameScreen implements Screen {
 
         // Player HP bar
         player.renderHpBar(shapeRenderer);
+
+        if (healthPotion != null) healthPotion.update(delta);
 
         shapeRenderer.end();
 
@@ -419,6 +476,11 @@ public class GameScreen implements Screen {
         if (deathOverlay != null && deathOverlay.isVisible()) {
             deathOverlay.render(delta);
         }
+
+        // UI cooldown dial above the potion icon
+        shapeRenderer.setProjectionMatrix(uiStage.getCamera().combined);
+        shapeRenderer.begin(com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.end();
     }
 
     @Override
@@ -471,6 +533,10 @@ public class GameScreen implements Screen {
 
         // 4) anything else (textures, button skins you track in arrays, etc.)
         // uiTextures, etc…
+
+        if (healthPotion != null) { healthPotion.dispose(); healthPotion = null; }
+
+        if (resourceManager != null) { resourceManager.dispose(); resourceManager = null; }
     }
 
     // ---- small style helper for the HUD button ----

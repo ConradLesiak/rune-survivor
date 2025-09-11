@@ -21,9 +21,14 @@ import com.badlogic.gdx.utils.Array;
  */
 public class IslandRenderer {
 
+    // === Terrain access for external systems ===
+    public enum TerrainType { WATER, BEACH, GRASS, DIRT, GRAVEL, ROCK }
+
     // thresholds (match your build() values)
     private static final float WATER_T = 0.48f;
     private static final float BEACH_T = 0.53f;
+    private static final float GRASS_T = 0.80f;
+
     // cached origin in world space
     private float originX, originY;
     // scratch
@@ -61,6 +66,7 @@ public class IslandRenderer {
     private static final Color DIRT          = new Color(0.55f, 0.40f, 0.22f, 1f);
     private static final Color GRAVEL        = new Color(0.62f, 0.62f, 0.64f, 1f);
     private static final Color ROCK          = new Color(0.55f, 0.55f, 0.58f, 1f);
+
 
     public IslandRenderer(int cols, int rows, float cellWorldUnits, int seed, World world) {
         this.cols = cols;
@@ -360,5 +366,30 @@ public class IslandRenderer {
     /** Convenience: land near island center. */
     public com.badlogic.gdx.math.Vector2 findCenterLandSpawn() {
         return findNearestLand(0f, 0f, Math.max(cols, rows));
+    }
+
+    // World bounds (where the island sprite is drawn)
+    public float getWorldMinX() { return originX; }
+    public float getWorldMinY() { return originY; }
+    public float getWorldWidth() { return cols * cellWorld; }
+    public float getWorldHeight() { return rows * cellWorld; }
+
+    // Classify terrain at world coordinates
+    public TerrainType getTerrainAtWorld(float wx, float wy) {
+        int[] xy = new int[2];
+        if (!worldToCell(wx, wy, xy)) return TerrainType.WATER; // outside treated as water
+        int x = xy[0], y = xy[1];
+        float val = height01[y][x];
+
+        if (isWater[y][x]) return TerrainType.WATER;
+        // Match the thresholds used in build()
+        if (val < BEACH_T) return TerrainType.BEACH;
+        if (val < GRASS_T) {
+            byte pm = patchMask[y][x];
+            if (pm == 1)      return TerrainType.DIRT;
+            else if (pm == 2) return TerrainType.GRAVEL;
+            else              return TerrainType.GRASS;
+        }
+        return TerrainType.ROCK;
     }
 }

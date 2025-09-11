@@ -9,7 +9,7 @@ import com.rgs.runesurvivor.entities.Player;
 
 public class SaveManager {
 
-    private static final String KEY_ISLAND_SEED = "saf2ga263123";
+    private static final String KEY_ISLAND_SEED = "1";
     private static final String PREF_NAME = "RuneSurvivorSave";
     private static final int SAVE_VERSION = 1;
 
