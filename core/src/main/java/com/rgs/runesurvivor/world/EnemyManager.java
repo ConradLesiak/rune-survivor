@@ -20,6 +20,10 @@ public class EnemyManager {
     private float spawnRadiusMult   = 2.0f;  // where new enemies appear
     private float despawnRadiusMult = 2.6f;  // beyond this they’re removed
 
+    private com.rgs.runesurvivor.world.CoinManager coinManager; // new
+    public void setCoinManager(com.rgs.runesurvivor.world.CoinManager cm) { this.coinManager = cm; }
+
+
     public EnemyManager(WorldManager worldManager, IslandRenderer island) {
         this.worldManager = worldManager;
         this.island = island;
@@ -64,6 +68,11 @@ public class EnemyManager {
 
             e.update(delta, player, hits);
             if (e.isDead()) {
+                // 30% drop chance
+                if (coinManager != null && com.badlogic.gdx.math.MathUtils.randomBoolean(0.30f)) {
+                    ep = e.getPosition();
+                    coinManager.spawn(ep.x, ep.y, 1);
+                }
                 e.dispose(worldManager);
                 enemies.removeIndex(i);
             }

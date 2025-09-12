@@ -86,6 +86,8 @@ public class GameScreen implements Screen {
     }
 
     private boolean exiting = false;
+    private boolean disposed = false;
+
 
     // Pause icon UI
     private com.badlogic.gdx.scenes.scene2d.ui.ImageButton pauseBtn;
@@ -102,7 +104,7 @@ public class GameScreen implements Screen {
 
     private com.rgs.runesurvivor.world.ResourceManager resourceManager;
 
-
+    private com.rgs.runesurvivor.world.CoinManager coinManager;
 
 
     public GameScreen(RuneSurvivorGame game) {
@@ -185,6 +187,12 @@ public class GameScreen implements Screen {
             }
         );
 
+        coinManager = new com.rgs.runesurvivor.world.CoinManager();
+        enemyManager.setCoinManager(coinManager);
+
+        // reflect current gold in inventory now (and whenever it opens)
+        inventoryOverlay.setGold(player.getGold());
+
         deathOverlay = new com.rgs.runesurvivor.ui.DeathOverlay(new com.rgs.runesurvivor.ui.DeathOverlay.Listener() {
             @Override public void onRespawn() { respawnPlayer(); }
             @Override public void onMainMenu() { requestExitToMainMenu(); }
@@ -256,25 +264,33 @@ public class GameScreen implements Screen {
         Gdx.input.setInputProcessor(new InputMultiplexer(uiStage, inputController));
     }
 
-    // openInventory()
+    // --- Inventory helpers ---
     private void openInventory() {
-        if (inventoryOpen) return;
-        inputController.reset(); // ← clear any held keys before focus change
-        inventoryOpen = true;
-        inventoryOverlay.setSwordEquipped(player.isSwordEquipped());
+        if (inventoryOpen || paused || dead) return;
+        if (inventoryOverlay == null) return;
+
+        // refresh UI (gold, etc.) right before showing
+        inventoryOverlay.setGold(player.getGold());
         inventoryOverlay.show();
-        Gdx.input.setInputProcessor(new InputMultiplexer(uiStage, inventoryOverlay.getStage(), inputController));
-        escGate = true; escCooldown = 0.12f;
+        inventoryOpen = true;
+
+        // route input to the inventory stage
+        Gdx.input.setInputProcessor(inventoryOverlay.getStage());
     }
 
-    // closeInventory()
     private void closeInventory() {
-        if (!inventoryOpen) return;
-        inventoryOpen = false;
+        if (!inventoryOpen || inventoryOverlay == null) return;
         inventoryOverlay.hide();
-        inputController.reset(); // ← clear any held keys after closing
-        Gdx.input.setInputProcessor(new InputMultiplexer(uiStage, paused ? pauseOverlay.getStage() : inputController));
-        escGate = true; escCooldown = 0.12f;
+        inventoryOpen = false;
+
+        // return input to the main UI stage
+        Gdx.input.setInputProcessor(uiStage);
+    }
+
+    private void toggleInventory() {
+        if (paused || dead) return;     // don’t open over pause/death
+        if (inventoryOpen) closeInventory();
+        else openInventory();
     }
 
     // setPaused(...)
@@ -299,6 +315,15 @@ public class GameScreen implements Screen {
 
     @Override
     public void render(float delta) {
+        if (inventoryOpen) {
+            inventoryOverlay.setGold(player.getGold());
+        }
+        if (exiting) {
+            Gdx.gl.glClearColor(0f,0f,0f,1f);
+            Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+            return; // no stepping, no drawing, no touching Box2D/GL objects
+        }
+
         // Hotkeys
         if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) {
             worldManager.toggleDebug();
@@ -308,6 +333,11 @@ public class GameScreen implements Screen {
             Gdx.gl.glClearColor(0,0,0,1);
             Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
             return;  // ← no stepping, no debugRender, no stage draws
+        }
+
+        // Open/close Inventory with 'I'
+        if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.I)) {
+            toggleInventory();
         }
 
         // ESC gate/cooldown
@@ -345,6 +375,7 @@ public class GameScreen implements Screen {
             float vw = worldStage.getViewport().getWorldWidth();
             float vh = worldStage.getViewport().getWorldHeight();
             enemyManager.update(delta, camCenterTmp, playerPosTmp, vw, vh, player, hitMarkers);
+            coinManager.update(delta, player);
 
             dashFx.update(delta);
 
@@ -392,6 +423,7 @@ public class GameScreen implements Screen {
 
         // 2) Characters (draw these UNDER resource nodes)
         enemyManager.render(game.batch);
+        coinManager.render(game.batch);
         player.renderSword(game.batch);          // (ok if this ends up under trees too)
         dashFx.renderGhosts(game.batch, player.getTexture());
         player.render(game.batch);
@@ -494,7 +526,6 @@ public class GameScreen implements Screen {
 
     @Override public void pause() {}
     @Override public void resume() {}
-    @Override public void hide()    { if (saveManager != null) saveManager.savePlayer(player); }
 
     @Override
     public void dispose() {
@@ -505,6 +536,7 @@ public class GameScreen implements Screen {
             enemyManager.dispose();   // destroys enemy bodies
             enemyManager = null;
         }
+        if (coinManager != null) { coinManager.dispose(); coinManager = null; }
         if (island != null) {
             island.dispose();         // destroys water-edge bodies
             island = null;
@@ -599,20 +631,16 @@ public class GameScreen implements Screen {
         if (exiting) return;
         exiting = true;
 
-        // Save before teardown
         if (saveManager != null) saveManager.savePlayer(player);
 
-        // Stop new events
-        Gdx.input.setInputProcessor(null);
+        // stop Box2D debug draw, stop taking input from THIS screen
+        if (worldManager != null) worldManager.setDebug(false);
+        if (Gdx.input.getInputProcessor() == uiStage || Gdx.input.getInputProcessor() == worldStage) {
+            Gdx.input.setInputProcessor(null);
+        }
 
-        // Absolutely no more Box2D debug draw
-        worldManager.setDebug(false);
-
-        // Defer screen change + dispose until after this frame
-        Gdx.app.postRunnable(() -> {
-            game.setScreen(new MainMenuScreen(game));
-            dispose();
-        });
+        // Switch screens on the next tick; DO NOT dispose here
+        Gdx.app.postRunnable(() -> game.setScreen(new MainMenuScreen(game)));
     }
 
     private Texture makePauseIconTex(int size, com.badlogic.gdx.graphics.Color bg, com.badlogic.gdx.graphics.Color bar) {
@@ -706,5 +734,37 @@ public class GameScreen implements Screen {
             saveManager.savePlayer(player);
         }
     }
+
+    @Override public void hide() {
+        // ensure we never render/step again
+        exiting = true;
+        // schedule teardown next frame (after the new screen is current)
+        Gdx.app.postRunnable(this::safeDispose);
+    }
+
+    private void safeDispose() {
+        if (disposed) return;
+        disposed = true;
+
+        // 1) destroy owners of bodies/fixtures BEFORE the world
+        if (enemyManager != null) { enemyManager.dispose(); enemyManager = null; }
+        if (resourceManager != null) { resourceManager.dispose(); resourceManager = null; }
+        if (island != null) { island.dispose(); island = null; } // (does GL finish; see below)
+        if (player != null) { player.dispose(); player = null; }
+
+        // 2) now the Box2D world
+        if (worldManager != null) { worldManager.setDebug(false); worldManager.dispose(); worldManager = null; }
+
+        // 3) UI / render helpers
+        if (pauseOverlay != null) { pauseOverlay.dispose(); pauseOverlay = null; }
+        if (inventoryOverlay != null) { inventoryOverlay.dispose(); inventoryOverlay = null; }
+        if (deathOverlay != null) { deathOverlay.dispose(); deathOverlay = null; }
+        if (shapeRenderer != null) { shapeRenderer.dispose(); shapeRenderer = null; }
+
+        // stages last
+        if (uiStage != null) { uiStage.dispose(); uiStage = null; }
+        if (worldStage != null) { worldStage.dispose(); worldStage = null; }
+    }
+
 
 }

@@ -78,12 +78,17 @@ public class IslandRenderer {
     }
 
     public void dispose() {
+        // remove water colliders first
         if (world != null) {
             for (Body b : waterBodies) world.destroyBody(b);
             waterBodies.clear();
         }
-        if (fbo != null) fbo.dispose();
-        if (sr  != null) sr.dispose();
+
+        // make sure any in-flight draws complete before killing GL objects
+        try { Gdx.gl.glFinish(); } catch (Throwable ignored) {}
+
+        if (fbo != null) { fbo.dispose(); fbo = null; }
+        if (sr  != null) { sr.dispose();  sr = null; }
     }
 
     public void render(SpriteBatch batch) {

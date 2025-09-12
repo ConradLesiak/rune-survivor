@@ -40,6 +40,10 @@ public class InventoryOverlay {
     // item display
     private final Texture swordTex;
 
+    private com.badlogic.gdx.graphics.Texture coinTex;
+    private com.badlogic.gdx.scenes.scene2d.ui.Image coinImg;
+    private com.badlogic.gdx.scenes.scene2d.ui.Label coinLbl;
+
     public InventoryOverlay(boolean initiallyEquipped, Consumer<Boolean> onEquipSword) {
         this.onEquipSword = onEquipSword;
         this.swordEquipped = initiallyEquipped;
@@ -63,6 +67,28 @@ public class InventoryOverlay {
 
         Label title = new Label("Inventory", titleStyle);
         title.setFontScale(2f);
+
+        coinTex = new com.badlogic.gdx.graphics.Texture("coin1.png");
+        coinTex.setFilter(com.badlogic.gdx.graphics.Texture.TextureFilter.Linear,
+            com.badlogic.gdx.graphics.Texture.TextureFilter.Linear);
+
+        com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable coinDr = new com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable(
+            new com.badlogic.gdx.graphics.g2d.TextureRegion(coinTex));
+        coinImg = new com.badlogic.gdx.scenes.scene2d.ui.Image(coinDr);
+
+        LabelStyle coinStyle = new com.badlogic.gdx.scenes.scene2d.ui.Label.LabelStyle(
+            new com.badlogic.gdx.graphics.g2d.BitmapFont(),
+            com.badlogic.gdx.graphics.Color.WHITE);
+        coinLbl = new com.badlogic.gdx.scenes.scene2d.ui.Label("0", coinStyle);
+
+        // Top row aligned right
+        com.badlogic.gdx.scenes.scene2d.ui.Table top = new com.badlogic.gdx.scenes.scene2d.ui.Table();
+        top.add().expandX().left();
+        top.add(coinImg).size(28f).padRight(6f);
+        top.add(coinLbl).padRight(2f);
+        root.add(top).growX().padBottom(8f).row();
+
+
 
         // Sword row
         swordTex = new Texture("sword1.png");
@@ -133,6 +159,7 @@ public class InventoryOverlay {
         if (swordTex != null) swordTex.dispose();
         for (Texture t : toDispose) t.dispose();
         toDispose.clear();
+        if (coinTex != null) { coinTex.dispose(); coinTex = null; }
     }
 
     public void setSwordEquipped(boolean equipped) {
@@ -167,4 +194,9 @@ public class InventoryOverlay {
     private Color scale(Color c, float mul) {
         return new Color(Math.min(c.r*mul,1f), Math.min(c.g*mul,1f), Math.min(c.b*mul,1f), c.a);
     }
+
+    public void setGold(int amount) {
+        if (coinLbl != null) coinLbl.setText(Integer.toString(Math.max(0, amount)));
+    }
+
 }

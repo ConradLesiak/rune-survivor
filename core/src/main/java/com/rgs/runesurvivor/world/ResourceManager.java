@@ -54,7 +54,7 @@ public class ResourceManager implements Disposable {
     private final float rockPerUnits2 = 1f / 7_000_000f;  // 1 per 7M u^2
     private final int minTrees = 12, minRocks = 24;
 
-    private static final float COLLIDER_SCALE = 0.90f; // 10% smaller colliders
+    private static final float COLLIDER_SCALE = 0.95f; // 5% smaller colliders
 
     public ResourceManager(IslandRenderer island, long islandSeed, World world) {
         this.island = island;

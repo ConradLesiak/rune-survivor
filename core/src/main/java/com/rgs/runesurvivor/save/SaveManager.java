@@ -38,6 +38,8 @@ public class SaveManager {
         prefs.putFloat("player_x", b.getPosition().x);
         prefs.putFloat("player_y", b.getPosition().y);
 
+        prefs.putInteger("gold", p.getGold());
+
         // Stats
         prefs.putFloat("hp_max", p.getMaxHp());
         prefs.putFloat("hp_current", p.getCurrentHp());
@@ -61,6 +63,7 @@ public class SaveManager {
         float y = prefs.getFloat("player_y", 0f);
         p.setPosition(x, y);
 
+        p.setGold(prefs.getInteger("gold", 0));
         // Stats (with clamping/sanity)
         float maxHp = Math.max(1f, prefs.getFloat("hp_max", 100f));
         float curHp = MathUtils.clamp(prefs.getFloat("hp_current", maxHp), 0f, maxHp);

@@ -91,6 +91,13 @@ public class Player {
     public void setDashCooldown(float s) { dashCooldown = Math.max(0f, s); }
     public float getDashCooldown() { return dashCooldown; }
 
+    // --- Currency ---
+    private int gold = 0;
+
+    public int  getGold() { return gold; }
+    public void setGold(int g) { gold = Math.max(0, g); }
+    public void addGold(int delta) { gold = Math.max(0, gold + delta); }
+
 
     public Player(WorldManager worldManager, float startX, float startY, InputController input) {
         this.input = input;
